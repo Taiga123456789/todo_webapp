@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オブジェクト指向プログラミング課題：TODOリスト</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f8;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 min-h-screen">
+
+    <div class="max-w-xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-2">TODOリスト (SQLite & PHP/JS)</h1>
+
+        <form id="taskForm" class="flex flex-col sm:flex-row gap-3 mb-8">
+            <input type="text" id="taskContent" placeholder="新しいタスクを入力" required
+                   class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 transition duration-150 shadow-sm"
+                   maxlength="255">
+            <button type="submit" id="addButton"
+                    class="bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 ease-in-out disabled:opacity-50">
+                タスクを追加
+            </button>
+        </form>
+        
+        <p id="loadingIndicator" class="text-center text-indigo-500 hidden mb-4">データを読み込み中...</p>
+        <p id="errorMessage" class="text-center text-red-500 hidden mb-4 font-medium"></p>
+
+        <div id="taskList" class="space-y-3">
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-gray-200">
+             <label class="flex items-center space-x-2">
+                <input type="checkbox" id="showCompleted" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                <span class="text-sm font-medium text-gray-700">完了したタスクを非表示にする</span>
+            </label>
+        </div>
+    </div>
+
+    <script>
+        const taskList = document.getElementById('taskList');
+        const taskForm = document.getElementById('taskForm');
+        const taskContentInput = document.getElementById('taskContent');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const showCompletedCheckbox = document.getElementById('showCompleted');
+
+        const API_ENDPOINT = 'api.php';
+
+        function escapeHTML(str) {
+            if (typeof str !== 'string') return '';
+            return str.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+        function renderTasks(tasks) {
+            taskList.innerHTML = '';
+            const hideCompleted = showCompletedCheckbox.checked;
+
+            tasks.forEach(task => {
+                if (hideCompleted && task.is_completed) {
+                    return;
+                }
+                
+                const taskItem = document.createElement('div');
+                const completedClass = task.is_completed ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-300';
+                const textClass = task.is_completed ? 'line-through text-gray-500' : 'text-gray-800';
+
+                taskItem.className = `flex items-center justify-between p-4 rounded-xl border ${completedClass} shadow-sm transition duration-200`;
+                taskItem.dataset.taskId = task.id;
+
+                taskItem.innerHTML = `
+                    <div class="flex items-center space-x-3 flex-grow min-w-0">
+                        <input type="checkbox" data-action="toggle" ${task.is_completed ? 'checked' : ''}
+                               class="w-5 h-5 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer">
+                        
+                        <span class="text-base font-medium truncate ${textClass} min-w-0">
+                            ${escapeHTML(task.content)}
+                        </span>
+                    </div>
+                    
+                    <button data-action="delete"
+                            class="text-red-500 hover:text-red-700 p-2 rounded-full transition duration-150">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                taskList.appendChild(taskItem);
+            });
+            if (tasks.length === 0) {
+                 taskList.innerHTML = '<p class="text-center text-gray-500 py-6">タスクはまだありません。新しく追加しましょう！</p>';
+            }
+        }
+
+        async function fetchTasks() {
+            loadingIndicator.classList.remove('hidden');
+            errorMessage.classList.add('hidden');
+            taskList.innerHTML = '';
+            
+            try {
+                const response = await fetch(API_ENDPOINT, { method: 'GET' });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+
+                if (result.success) {
+                    renderTasks(result.data);
+                } else {
+                    errorMessage.textContent = 'データの取得に失敗しました: ' + result.message;
+                    errorMessage.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                errorMessage.textContent = 'サーバーとの通信中にエラーが発生しました。PHPファイルまたはSQLiteファイルのアクセス権を確認してください。';
+                errorMessage.classList.remove('hidden');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const content = taskContentInput.value.trim();
+
+            if (!content) {
+                console.log('Validation failed: Task content is empty.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    taskContentInput.value = '';
+                    await fetchTasks();
+                } else {
+                    console.error('Add task failed:', result.message);
+                }
+            } catch (error) {
+                console.error('Add task error:', error);
+            }
+        });
+
+        taskList.addEventListener('click', async (e) => {
+            const button = e.target.closest('[data-action]');
+            if (!button) return;
+
+            const action = button.dataset.action;
+            const taskItem = button.closest('[data-task-id]');
+            const taskId = taskItem.dataset.taskId;
+
+            try {
+                let response;
+
+                if (action === 'toggle') {
+                    const isCompleted = e.target.checked; 
+                    response = await fetch(API_ENDPOINT, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: taskId, is_completed: isCompleted ? 1 : 0 })
+                    });
+                } else if (action === 'delete') {
+                    console.log(`Task deletion requested for ID: ${taskId}`); 
+                    
+                    response = await fetch(API_ENDPOINT, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: taskId })
+                    });
+                }
+
+                if (!response) return;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+
+                if (result.success) {
+                    await fetchTasks();
+                } else {
+                    console.error(`${action === 'delete' ? '削除' : '更新'}に失敗しました: ${result.message}`);
+                }
+
+            } catch (error) {
+                console.error(`${action} error:`, error);
+            }
+        });
+        
+        showCompletedCheckbox.addEventListener('change', () => {
+            fetchTasks(); 
+        });
+
+        window.onload = fetchTasks;
+    </script>
+</body>
+</html>
