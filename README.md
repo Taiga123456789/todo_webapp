@@ -101,7 +101,7 @@ HTTPメソッドを明示的に使い分けることで、
 
 ## ドキュメント
 
-- 最終課題作品解説書（英語）  
+- 最終課題作品解説書 
   `docs/final_project_description_oop.pdf`
 
 - 授業提出時の原本（ZIP）  
